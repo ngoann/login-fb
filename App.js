@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 WebBrowser.maybeCompleteAuthSession()
 
 export default function App() {
+  const [accessToken, setAccessToken] = React.useState(null)
   const [uid, setUid] = React.useState(null)
   const [user, setUser] = React.useState(null)
 
@@ -22,17 +23,21 @@ export default function App() {
   })
 
   const getUserInfo = async () => {
-    const uidStorage = JSON.parse(await AsyncStorage.getItem('@uid'))
+    const accessTokenStorage = JSON.parse(await AsyncStorage.getItem('@accessToken'))
 
-    if (uidStorage && !user) {
-      const userInfo = await getDetail(uidStorage)
+    if (accessTokenStorage && !user) {
+      const userInfo = await getDetail(accessTokenStorage)
 
       if (userInfo) {
         setUser(userInfo)
       } else {
-        await AsyncStorage.setItem('@uid', null)
+        removeAccessToken()
       }
     }
+  }
+
+  const removeAccessToken = async () => {
+    await AsyncStorage.setItem('@accessToken', null)
   }
 
   const handleLoginAction = async () => {
@@ -41,23 +46,16 @@ export default function App() {
     if (result.type === 'success') {
       const accessToken = result.authentication.accessToken
 
-      const userInfoResponse = await fetch(
-        `https://graph.facebook.com/me?access_token=${accessToken}&fields=id,name,picture.type(large)`
-      )
+      const response = await login(accessToken)
 
-      const userInfo = await userInfoResponse.json()
-      const loginStatus = await login(userInfo, accessToken)
+      await AsyncStorage.setItem('@accessToken', response.access_token)
 
-      await AsyncStorage.setItem('@uid', userInfo.id)
-
-      setUid(userInfo.id)
-
-      return
+      setAccessToken(response.access_token)
     }
   }
 
   const handleLogoutAction = async () => {
-    await AsyncStorage.setItem('@uid', null)
+    removeAccessToken()
 
     setUser(null)
   }
@@ -78,7 +76,7 @@ export default function App() {
 function Profile({ user, logout }) {
   return (
     <View style={styles.profile}>
-      <Image source={{ uri: user.picture.data ? user.picture.data.url : user.picture }} style={styles.image} />
+      <Image source={{ uri: user.picture }} style={styles.image} />
       <Text style={styles.name}>{user.name}</Text>
       <Text>ID: {user.id}</Text>
       <Button title='Log out' onPress={logout} />
@@ -99,8 +97,8 @@ const styles = StyleSheet.create({
     fontSize: 20,
   },
   image: {
-    width: 100,
-    height: 100,
     borderRadius: 50,
+    height: 100,
+    width: 100,
   },
 })
